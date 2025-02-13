@@ -1,0 +1,139 @@
+config:
+  target: "http://localhost:3000/api/auth"
+  phases:
+    - duration: 60
+      arrivalRate: 5
+      rampTo: 50
+      name: "Warm up phase"
+    - duration: 300
+      arrivalRate: 50
+      name: "Sustained load phase"
+    - duration: 60
+      arrivalRate: 50
+      rampTo: 100
+      name: "Stress test phase"
+  defaults:
+    headers:
+      Content-Type: "application/json"
+  ensure:
+    maxErrorRate: 1
+    max95thResponseTime: 100
+  plugins:
+    metrics-by-endpoint: {}
+
+processor:
+  - generateRandomUser:
+      function: "generateRandomUser"
+  - validateResponse:
+      function: "validateResponse"
+
+functions:
+  # Generate random user data for registration tests
+  generateRandomUser:
+    - const faker = require('@faker-js/faker').faker
+    - const email = faker.internet.email()
+    - const password = `${faker.internet.password(12)}!2Aa`
+    - const firstName = faker.person.firstName()
+    - const lastName = faker.person.lastName()
+    - return { 
+        email,
+        password,
+        profile: {
+          firstName,
+          lastName,
+          timezone: 'UTC',
+          notifications: true,
+          language: 'en'
+        }
+      }
+
+  # Validate response data and performance metrics
+  validateResponse:
+    - if (response.statusCode !== 200 && response.statusCode !== 201)
+      - log(`Error: Invalid status code ${response.statusCode}`)
+      - return false
+    - if (response.timings.duration > 100)
+      - log(`Warning: Response time ${response.timings.duration}ms exceeds threshold`)
+    - if (response.body.accessToken && !response.body.accessToken.match(/^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+$/))
+      - log('Error: Invalid token format')
+      - return false
+    - return true
+
+scenarios:
+  # Login flow testing with high weight
+  - name: "Login Flow"
+    weight: 70
+    flow:
+      - post:
+          url: "/login"
+          json:
+            email: "{{ TEST_USER.email }}"
+            password: "testPassword123!"
+          capture:
+            - json: "$.accessToken"
+              as: "userToken"
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - hasProperty: "accessToken"
+            - responseTime: 100
+      - function: "validateResponse"
+
+  # Registration flow testing
+  - name: "Registration Flow"
+    weight: 20
+    flow:
+      - function: "generateRandomUser"
+        capture:
+          - json: "$"
+            as: "newUser"
+      - post:
+          url: "/register"
+          json:
+            email: "{{ newUser.email }}"
+            password: "{{ newUser.password }}"
+            profile: "{{ newUser.profile }}"
+          expect:
+            - statusCode: 201
+            - responseTime: 100
+            - hasProperty: "id"
+
+  # Token refresh flow testing
+  - name: "Token Refresh Flow"
+    weight: 10
+    flow:
+      - get:
+          url: "/refresh"
+          headers:
+            Authorization: "Bearer {{ userToken }}"
+          expect:
+            - statusCode: 200
+            - responseTime: 100
+            - hasProperty: "newAccessToken"
+      - function: "validateResponse"
+
+  # OAuth flow testing
+  - name: "OAuth Flow"
+    weight: 10
+    flow:
+      - get:
+          url: "/oauth/authorize"
+          qs:
+            client_id: "{{ $processEnvironment.CLIENT_ID }}"
+            response_type: "code"
+            scope: "read write"
+          expect:
+            - statusCode: 302
+            - responseTime: 100
+      - post:
+          url: "/oauth/token"
+          json:
+            grant_type: "authorization_code"
+            code: "{{ code }}"
+            client_id: "{{ $processEnvironment.CLIENT_ID }}"
+            client_secret: "{{ $processEnvironment.CLIENT_SECRET }}"
+          expect:
+            - statusCode: 200
+            - responseTime: 100
+            - hasProperty: "access_token"
+            - hasProperty: "refresh_token"
