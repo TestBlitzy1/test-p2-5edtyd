@@ -1,0 +1,159 @@
+config:
+  target: "http://localhost:3000/api/v1"
+  # Load test phases to gradually increase system load
+  phases:
+    - name: "Warm up phase"
+      duration: 60
+      arrivalRate: 5
+      rampTo: 50
+    - name: "Sustained load phase"
+      duration: 300
+      arrivalRate: 50
+    - name: "Stress test phase"
+      duration: 60
+      arrivalRate: 50
+      rampTo: 100
+  
+  # Default request configuration
+  defaults:
+    headers:
+      Content-Type: "application/json"
+      Authorization: "Bearer ${token}"
+
+  # Performance thresholds based on technical requirements
+  ensure:
+    # Latency thresholds (<100ms requirement)
+    p95: 100
+    p99: 200
+    median: 50
+    # Request rate thresholds
+    rps:
+      mean: 100
+      count: 30000
+    # Success rate threshold
+    successRate: 99.9
+
+  # Custom JavaScript functions for test data generation
+  processor: "./campaign.processor.js"
+
+scenarios:
+  # Campaign Creation Flow - 70% of test traffic
+  - name: "Campaign Creation Flow"
+    weight: 70
+    flow:
+      # Create new campaign
+      - post:
+          url: "/campaigns"
+          beforeRequest: "generateTestData"
+          json: "{{ $generateTestData }}"
+          capture:
+            - json: "$.id"
+              as: "campaignId"
+          expect:
+            - statusCode: 201
+            - contentType: "application/json"
+            - hasProperty: "id"
+      
+      # Verify campaign creation
+      - get:
+          url: "/campaigns/{{ campaignId }}"
+          expect:
+            - statusCode: 200
+            - contentType: "application/json"
+            - hasProperty: "name"
+            - hasProperty: "status"
+      
+      # Add ad groups to campaign
+      - post:
+          url: "/campaigns/{{ campaignId }}/adgroups"
+          json:
+            name: "Test Ad Group"
+            status: "ACTIVE"
+          expect:
+            - statusCode: 201
+      
+      # Set campaign live
+      - put:
+          url: "/campaigns/{{ campaignId }}/status"
+          json:
+            status: "ACTIVE"
+          expect:
+            - statusCode: 200
+
+  # Campaign Optimization Flow - 30% of test traffic
+  - name: "Campaign Optimization Flow"
+    weight: 30
+    flow:
+      # Request AI optimization
+      - post:
+          url: "/campaigns/{{ campaignId }}/optimize"
+          json:
+            optimizationGoals: ["CTR", "CONVERSIONS", "ROAS"]
+          expect:
+            - statusCode: 200
+            - contentType: "application/json"
+            - hasProperty: "recommendations"
+      
+      # Apply optimization recommendations
+      - put:
+          url: "/campaigns/{{ campaignId }}"
+          json:
+            aiOptimization:
+              enabled: true
+              autoOptimize: true
+              optimizationFrequency: 24
+          expect:
+            - statusCode: 200
+      
+      # Verify optimization results
+      - get:
+          url: "/campaigns/{{ campaignId }}/performance"
+          expect:
+            - statusCode: 200
+            - contentType: "application/json"
+            - hasProperty: "metrics"
+            - hasProperty: "trends"
+
+  # Platform Integration Flow
+  - name: "Platform Integration Flow"
+    weight: 20
+    flow:
+      # Sync with LinkedIn
+      - post:
+          url: "/campaigns/{{ campaignId }}/sync"
+          json:
+            platform: "LINKEDIN"
+          expect:
+            - statusCode: 200
+      
+      # Sync with Google Ads
+      - post:
+          url: "/campaigns/{{ campaignId }}/sync"
+          json:
+            platform: "GOOGLE"
+          expect:
+            - statusCode: 200
+      
+      # Verify sync status
+      - get:
+          url: "/campaigns/{{ campaignId }}/sync/status"
+          expect:
+            - statusCode: 200
+            - contentType: "application/json"
+            - hasProperty: "syncStatus"
+
+variables:
+  # JWT token for authentication
+  token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+
+before:
+  # Setup function to run before tests
+  flow:
+    - function: "setupTestData"
+    - log: "Test data setup complete"
+
+after:
+  # Cleanup function to run after tests
+  flow:
+    - function: "cleanupTestData"
+    - log: "Test data cleanup complete"
