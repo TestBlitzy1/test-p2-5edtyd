@@ -1,0 +1,103 @@
+# Prometheus configuration for Sales Intelligence Platform
+# Version: 2.45.0
+
+global:
+  # Global scrape interval and evaluation interval
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+  # External labels to identify the environment
+  external_labels:
+    monitor: sales-intelligence-platform
+    environment: ${ENV:-production}
+    region: ${REGION:-us-east-1}
+
+# Scrape configurations for all microservices
+scrape_configs:
+  # API Gateway monitoring
+  - job_name: api-gateway
+    metrics_path: /metrics
+    scheme: https
+    basic_auth:
+      username: ${METRICS_USER}
+      password: ${METRICS_PASSWORD}
+    static_configs:
+      - targets: ['api-gateway:8080']
+        labels:
+          service: api-gateway
+          tier: frontend
+    relabel_configs:
+      - source_labels: ['__address__']
+        target_label: instance
+
+  # Campaign Service monitoring
+  - job_name: campaign-service
+    metrics_path: /metrics
+    scheme: https
+    static_configs:
+      - targets: ['campaign-service:8081']
+        labels:
+          service: campaign-service
+          tier: backend
+
+  # Analytics Service monitoring
+  - job_name: analytics-service
+    metrics_path: /metrics
+    scheme: https
+    static_configs:
+      - targets: ['analytics-service:8082']
+        labels:
+          service: analytics-service
+          tier: backend
+
+  # Auth Service monitoring
+  - job_name: auth-service
+    metrics_path: /metrics
+    scheme: https
+    static_configs:
+      - targets: ['auth-service:8083']
+        labels:
+          service: auth-service
+          tier: security
+
+  # AI Service monitoring
+  - job_name: ai-service
+    metrics_path: /metrics
+    scheme: https
+    static_configs:
+      - targets: ['ai-service:8084']
+        labels:
+          service: ai-service
+          tier: ml
+
+  # Platform Integration Service monitoring
+  - job_name: platform-integration
+    metrics_path: /metrics
+    scheme: https
+    static_configs:
+      - targets: ['platform-integration:8085']
+        labels:
+          service: platform-integration
+          tier: integration
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+      timeout: 10s
+      api_version: v2
+
+# Rules files for different types of alerts
+rule_files:
+  - /etc/prometheus/rules/service_alerts.rules
+  - /etc/prometheus/rules/resource_alerts.rules
+  - /etc/prometheus/rules/business_alerts.rules
+
+# Storage configuration
+storage:
+  tsdb:
+    # 30-day retention period for time series data
+    retention_time: 30d
+    # Maximum storage size of 50GB
+    retention_size: 50GB
