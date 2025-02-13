@@ -1,0 +1,77 @@
+# Global owners - Platform leads must review all changes by default
+* @platform-leads
+
+# Backend service ownership
+/src/backend/ @backend-team
+/src/backend/ai-service/ @ai-team @backend-team @security-team
+/src/backend/platform-integration/ @integration-team @backend-team @security-team
+/src/backend/analytics-service/ @analytics-team @backend-team @data-privacy-team
+/src/backend/auth-service/ @security-team @backend-team @platform-leads
+/src/backend/api-gateway/ @backend-team @platform-leads @security-team
+/src/backend/db/ @db-team @backend-team @security-team
+/src/backend/shared/ @backend-team @frontend-team @security-team
+
+# Frontend application ownership
+/src/web/ @frontend-team @security-team
+
+# Test suite ownership
+/src/test/ @qa-team @security-team
+/src/test/security/ @security-team @qa-team @platform-leads
+/src/test/performance/ @performance-team @qa-team @platform-leads
+/src/test/integration/ @qa-team @backend-team @frontend-team
+/src/test/e2e/ @qa-team @frontend-team
+
+# Infrastructure and deployment
+/infrastructure/ @devops-team @security-team @platform-leads
+/kubernetes/ @devops-team @security-team @platform-leads
+/terraform/ @devops-team @security-team @platform-leads
+
+# CI/CD pipeline configuration
+/.github/workflows/ @devops-team @platform-leads @security-team
+/.github/actions/ @devops-team @platform-leads
+
+# Documentation
+/docs/ @platform-leads @technical-writers
+
+# Security configurations
+/security/ @security-team @platform-leads
+/.secrets/ @security-team @platform-leads
+/.env.example @security-team @devops-team
+
+# Package dependencies
+/package.json @platform-leads @security-team
+/package-lock.json @platform-leads @security-team
+/yarn.lock @platform-leads @security-team
+
+# Configuration files
+/*.config.js @platform-leads @devops-team
+/*.config.ts @platform-leads @devops-team
+/tsconfig.json @platform-leads @backend-team @frontend-team
+
+# Docker configurations
+/Dockerfile @devops-team @security-team
+/docker-compose*.yml @devops-team @security-team
+/.dockerignore @devops-team
+
+# API specifications
+/api/ @backend-team @platform-leads @security-team
+/swagger/ @backend-team @platform-leads
+
+# Database migrations and schemas
+/migrations/ @db-team @backend-team @security-team
+/schemas/ @db-team @backend-team @security-team
+
+# Assets and static files
+/public/ @frontend-team
+/assets/ @frontend-team
+
+# Monitoring and logging
+/monitoring/ @devops-team @security-team
+/logging/ @devops-team @security-team
+
+# AI/ML model configurations
+/models/ @ai-team @security-team
+/training/ @ai-team @security-team
+
+# Analytics configurations
+/analytics/ @analytics-team @security-team @data-privacy-team
