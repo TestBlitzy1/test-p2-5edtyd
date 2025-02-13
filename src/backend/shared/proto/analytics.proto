@@ -1,0 +1,132 @@
+syntax = "proto3";
+
+package analytics;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+option go_package = "./analytics";
+
+// Analytics service providing comprehensive campaign performance tracking
+// and real-time metrics streaming capabilities
+service AnalyticsService {
+    // Retrieves detailed analytics data for a specific campaign
+    rpc GetCampaignAnalytics(CampaignAnalyticsRequest) returns (CampaignAnalyticsResponse) {}
+    
+    // Streams real-time metric updates for active campaigns
+    rpc StreamRealTimeMetrics(RealTimeMetricsRequest) returns (stream MetricUpdate) {}
+    
+    // Generates comprehensive performance report with AI-driven insights
+    rpc GetPerformanceReport(PerformanceReportRequest) returns (PerformanceReport) {}
+}
+
+// Supported metric types for campaign performance tracking
+enum MetricType {
+    METRIC_TYPE_UNSPECIFIED = 0;
+    IMPRESSIONS = 1;
+    CLICKS = 2;
+    CTR = 3;
+    CONVERSIONS = 4;
+    COST = 5;
+    CPC = 6;
+    CPM = 7;
+    ROAS = 8;
+}
+
+// Time granularity options for data aggregation
+enum TimeGranularity {
+    TIME_GRANULARITY_UNSPECIFIED = 0;
+    HOURLY = 1;
+    DAILY = 2;
+    WEEKLY = 3;
+    MONTHLY = 4;
+}
+
+// Single metric measurement with metadata
+message Metric {
+    MetricType type = 1;
+    double value = 2;
+    google.protobuf.Timestamp timestamp = 3;
+    double confidence_score = 4;
+    map<string, string> metadata = 5;
+}
+
+// Request for campaign analytics data
+message CampaignAnalyticsRequest {
+    string campaign_id = 1;
+    google.protobuf.Timestamp start_date = 2;
+    google.protobuf.Timestamp end_date = 3;
+    TimeGranularity granularity = 4;
+    repeated MetricType metric_types = 5;
+    map<string, string> filters = 6;
+}
+
+// Response containing campaign analytics data
+message CampaignAnalyticsResponse {
+    string campaign_id = 1;
+    repeated Metric metrics = 2;
+    TimeGranularity granularity = 3;
+    map<string, double> aggregates = 4;
+    map<string, string> metadata = 5;
+}
+
+// Request for real-time metrics streaming
+message RealTimeMetricsRequest {
+    string campaign_id = 1;
+    repeated MetricType metric_types = 2;
+    uint32 update_interval_seconds = 3;
+}
+
+// Real-time metric update message
+message MetricUpdate {
+    string campaign_id = 1;
+    Metric metric = 2;
+    string update_type = 3;
+    map<string, string> metadata = 4;
+}
+
+// Request for performance report generation
+message PerformanceReportRequest {
+    string campaign_id = 1;
+    google.protobuf.Timestamp start_date = 2;
+    google.protobuf.Timestamp end_date = 3;
+    repeated MetricType metric_types = 4;
+    bool include_predictions = 5;
+    bool include_recommendations = 6;
+}
+
+// Comprehensive performance report
+message PerformanceReport {
+    string campaign_id = 1;
+    map<string, double> metrics = 2;
+    map<string, double> trends = 3;
+    map<string, double> predictions = 4;
+    map<string, double> confidence_scores = 5;
+    repeated string recommendations = 6;
+    map<string, string> metadata = 7;
+}
+
+// Filter options for analytics queries
+message AnalyticsFilter {
+    string field = 1;
+    string operator = 2;
+    string value = 3;
+}
+
+// Trend analysis data structure
+message TrendData {
+    MetricType metric_type = 1;
+    double current_value = 2;
+    double previous_value = 3;
+    double change_percentage = 4;
+    string trend_direction = 5;
+}
+
+// AI-generated recommendation
+message Recommendation {
+    string id = 1;
+    string description = 2;
+    double impact_score = 3;
+    map<string, double> expected_improvements = 4;
+    google.protobuf.Timestamp generated_at = 5;
+}
