@@ -1,0 +1,131 @@
+/* Import Tailwind CSS base layers */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Import custom base styles */
+@import './globals.css';
+
+/* Base layer customizations */
+@layer base {
+  html {
+    @apply antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  body {
+    @apply bg-background-primary text-text-primary min-h-screen;
+  }
+}
+
+/* Custom component classes */
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-md font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
+  }
+
+  .btn-primary {
+    @apply bg-primary-500 text-white hover:bg-primary-600 focus:ring-primary-500;
+  }
+
+  .btn-secondary {
+    @apply bg-secondary-500 text-white hover:bg-secondary-600 focus:ring-secondary-500;
+  }
+
+  .card {
+    @apply bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow duration-200;
+  }
+
+  .input-field {
+    @apply w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 placeholder-gray-400;
+  }
+
+  .form-label {
+    @apply block text-sm font-medium text-gray-700 mb-1;
+  }
+}
+
+/* Custom utility classes */
+@layer utilities {
+  .flex-center {
+    @apply flex items-center justify-center;
+  }
+
+  .grid-auto-fit {
+    @apply grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-4;
+  }
+
+  .text-balance {
+    @apply text-pretty balance;
+  }
+}
+
+/* Responsive container classes */
+.container {
+  @apply mx-auto px-4 w-full;
+}
+
+@screen sm {
+  .container {
+    @apply max-w-[640px];
+  }
+}
+
+@screen md {
+  .container {
+    @apply max-w-[768px];
+  }
+}
+
+@screen lg {
+  .container {
+    @apply max-w-[1024px];
+  }
+}
+
+@screen xl {
+  .container {
+    @apply max-w-[1280px];
+  }
+}
+
+@screen 2xl {
+  .container {
+    @apply max-w-[1536px];
+  }
+}
+
+/* Theme configuration */
+:root {
+  /* Colors */
+  --color-primary-50: #f0f9ff;
+  --color-primary-500: #0ea5e9;
+  --color-primary-600: #0284c7;
+  --color-secondary-50: #f0f9ff;
+  --color-secondary-500: #6366f1;
+  --color-secondary-600: #4f46e5;
+  --color-background-primary: #ffffff;
+  --color-background-secondary: #f9fafb;
+  --color-text-primary: #111827;
+  --color-text-secondary: #4b5563;
+
+  /* Typography */
+  --font-family-base: Inter, system-ui, -apple-system, sans-serif;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+
+  /* Spacing */
+  --spacing-px: 1px;
+  --spacing-0: 0;
+  --spacing-1: 0.25rem;
+  --spacing-2: 0.5rem;
+  --spacing-4: 1rem;
+  --spacing-6: 1.5rem;
+  --spacing-8: 2rem;
+  --spacing-12: 3rem;
+  --spacing-16: 4rem;
+}
