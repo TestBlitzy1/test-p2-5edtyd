@@ -1,0 +1,123 @@
+version: '3.8'
+
+services:
+  # Main test runner service
+  test_runner:
+    build:
+      context: .
+      dockerfile: test.Dockerfile
+    environment:
+      - NODE_ENV=test
+      - TEST_MODE=true
+      - TEST_COVERAGE_ENABLED=true
+      - TEST_COVERAGE_THRESHOLD=80
+      - POSTGRES_HOST=test_db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=test_db
+      - POSTGRES_USER=test_user
+      - REDIS_HOST=test_cache
+      - REDIS_PORT=6379
+      - API_GATEWAY_URL=http://test_api_gateway:4000
+      - AUTH_SERVICE_URL=http://test_auth_service:4001
+      - CAMPAIGN_SERVICE_URL=http://test_campaign_service:4002
+      - ANALYTICS_SERVICE_URL=http://test_analytics_service:4003
+      - PLATFORM_SERVICE_URL=http://test_platform_integration:4004
+      - AI_SERVICE_URL=http://test_ai_service:8001
+      - DEBUG_PORT=9229
+    volumes:
+      - .:/app
+      - ./coverage:/app/coverage
+      - ./test-results:/app/test-results
+      - ./performance-reports:/app/performance-reports
+    ports:
+      - "9229:9229" # Debug port
+    healthcheck:
+      test: ["CMD", "node", "utils/healthcheck.js"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      test_db:
+        condition: service_healthy
+      test_cache:
+        condition: service_healthy
+    networks:
+      - test_network
+
+  # Test PostgreSQL database
+  test_db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=test_db
+      - POSTGRES_USER=test_user
+      - POSTGRES_PASSWORD=test_password
+    volumes:
+      - test_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432" # Different port to avoid conflicts
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d test_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - test_network
+
+  # Test Redis cache
+  test_cache:
+    image: redis:7.0-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - test_redis_data:/data
+    ports:
+      - "6380:6379" # Different port to avoid conflicts
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - test_network
+
+  # Mock API Gateway for testing
+  test_api_gateway:
+    build:
+      context: ../../backend/api-gateway
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=test
+      - PORT=4000
+    ports:
+      - "4000:4000"
+    networks:
+      - test_network
+
+  # Mock Auth Service for testing
+  test_auth_service:
+    build:
+      context: ../../backend/auth-service
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=test
+      - PORT=4001
+    ports:
+      - "4001:4001"
+    networks:
+      - test_network
+
+volumes:
+  test_postgres_data:
+    driver: local
+  test_redis_data:
+    driver: local
+
+networks:
+  test_network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
+    driver_opts:
+      com.docker.network.bridge.name: test_network
+      com.docker.network.driver.mtu: 1450
