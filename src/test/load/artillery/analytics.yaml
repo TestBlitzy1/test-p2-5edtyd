@@ -1,0 +1,125 @@
+config:
+  target: "{{ $processEnvironment.API_BASE_URL }}"
+  phases:
+    - name: "warmup"
+      duration: 60
+      arrivalRate: 5
+    - name: "ramp"
+      duration: 120
+      arrivalRate: 5
+      rampTo: 50
+    - name: "sustained_load"
+      duration: 300
+      arrivalRate: 50
+    - name: "spike"
+      duration: 60
+      arrivalRate: 100
+  defaults:
+    headers:
+      Content-Type: "application/json"
+      Authorization: "Bearer {{ $processEnvironment.TEST_AUTH_TOKEN }}"
+  plugins:
+    metrics-by-endpoint: {}
+    expect: {}
+
+# Custom function to generate realistic test metrics
+processor: "./analyticsProcessor.js"
+
+scenarios:
+  - name: "campaign_analytics"
+    weight: 40
+    flow:
+      - get:
+          url: "/api/analytics/campaigns/{{ $randomString() }}"
+          expect:
+            - statusCode: 200
+            - contentType: json
+      - think: 2
+      - get:
+          url: "/api/analytics/campaigns/{{ $randomString() }}/performance"
+          qs:
+            startDate: "{{ $processEnvironment.TEST_START_DATE }}"
+            endDate: "{{ $processEnvironment.TEST_END_DATE }}"
+            granularity: "DAILY"
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - hasProperty: "metrics"
+
+  - name: "realtime_metrics"
+    weight: 35
+    flow:
+      - loop:
+          - get:
+              url: "/api/analytics/dashboard"
+              expect:
+                - statusCode: 200
+                - contentType: json
+                - hasProperty: "metrics"
+                - hasProperty: "trends"
+          - function: "generateMetrics"
+          - think: 5
+        count: 10
+
+  - name: "performance_forecast"
+    weight: 25
+    flow:
+      - get:
+          url: "/api/analytics/campaigns/{{ $randomString() }}/forecast"
+          qs:
+            targetDate: "{{ $processEnvironment.TEST_FORECAST_DATE }}"
+          expect:
+            - statusCode: 200
+            - contentType: json
+            - hasProperty: "predictions"
+            - hasProperty: "confidence"
+
+before:
+  flow:
+    - log: "Starting analytics load test"
+    - function: "generateTestToken"
+
+after:
+  flow:
+    - log: "Completed analytics load test"
+
+variables:
+  campaignIds: "${TEST_CAMPAIGN_IDS}"
+
+hooks:
+  generateRandomMetrics: "generateMetrics()"
+
+# Custom metrics configuration
+config.plugins.metrics-by-endpoint.thresholds:
+  - metric: "http.response_time"
+    max: 500
+    min: 0
+  - metric: "http.requests"
+    max: 1000
+  - metric: "vusers.failed"
+    max: 5
+
+# Environment variable validation
+ensure:
+  - env: "API_BASE_URL"
+    message: "API_BASE_URL environment variable must be set"
+  - env: "TEST_AUTH_TOKEN"
+    message: "TEST_AUTH_TOKEN environment variable must be set"
+  - env: "TEST_START_DATE"
+    message: "TEST_START_DATE environment variable must be set"
+  - env: "TEST_END_DATE"
+    message: "TEST_END_DATE environment variable must be set"
+  - env: "TEST_FORECAST_DATE"
+    message: "TEST_FORECAST_DATE environment variable must be set"
+
+# Export configuration for reuse
+exports:
+  - name: "analyticsLoadTest"
+    type: "object"
+    members_exposed:
+      - member_name: "config"
+        member_type: "object"
+        export_type: "named"
+      - member_name: "scenarios"
+        member_type: "array"
+        export_type: "named"
