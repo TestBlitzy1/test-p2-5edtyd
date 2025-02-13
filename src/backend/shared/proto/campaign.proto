@@ -1,0 +1,261 @@
+syntax = "proto3";
+
+package campaign;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+import "./analytics.proto";
+
+option go_package = "./campaign";
+
+// Service definition for comprehensive campaign management
+service CampaignService {
+    // Creates a new campaign with AI-optimized structure
+    rpc CreateCampaign(CreateCampaignRequest) returns (Campaign) {}
+    
+    // Retrieves campaign details by ID
+    rpc GetCampaign(GetCampaignRequest) returns (Campaign) {}
+    
+    // Lists campaigns with filtering and pagination
+    rpc ListCampaigns(ListCampaignsRequest) returns (ListCampaignsResponse) {}
+    
+    // Updates existing campaign configuration
+    rpc UpdateCampaign(UpdateCampaignRequest) returns (Campaign) {}
+    
+    // Deletes a campaign
+    rpc DeleteCampaign(DeleteCampaignRequest) returns (google.protobuf.BoolValue) {}
+    
+    // Triggers AI-powered campaign optimization
+    rpc OptimizeCampaign(OptimizeCampaignRequest) returns (Campaign) {}
+    
+    // Retrieves campaign performance metrics
+    rpc GetCampaignPerformance(GetCampaignPerformanceRequest) returns (CampaignPerformance) {}
+    
+    // Batch updates multiple campaigns
+    rpc BatchUpdateCampaigns(BatchUpdateCampaignsRequest) returns (BatchUpdateCampaignsResponse) {}
+}
+
+// Supported advertising platforms
+enum PlatformType {
+    PLATFORM_UNSPECIFIED = 0;
+    LINKEDIN = 1;
+    GOOGLE = 2;
+}
+
+// Campaign objectives aligned with platform capabilities
+enum CampaignObjective {
+    OBJECTIVE_UNSPECIFIED = 0;
+    LEAD_GENERATION = 1;
+    BRAND_AWARENESS = 2;
+    WEBSITE_TRAFFIC = 3;
+}
+
+// Campaign lifecycle states
+enum CampaignStatus {
+    STATUS_UNSPECIFIED = 0;
+    DRAFT = 1;
+    ACTIVE = 2;
+    PAUSED = 3;
+    COMPLETED = 4;
+    OPTIMIZING = 5;
+    ERROR = 6;
+}
+
+// Budget period options
+enum BudgetPeriod {
+    BUDGET_PERIOD_UNSPECIFIED = 0;
+    DAILY = 1;
+    LIFETIME = 2;
+}
+
+// Campaign budget configuration
+message Budget {
+    double amount = 1;
+    string currency = 2;
+    BudgetPeriod period = 3;
+    google.protobuf.DoubleValue daily_spend_limit = 4;
+    google.protobuf.DoubleValue total_budget_limit = 5;
+    bool enable_auto_optimization = 6;
+}
+
+// Audience targeting configuration
+message Targeting {
+    repeated string locations = 1;
+    repeated string industries = 2;
+    repeated string company_sizes = 3;
+    repeated string job_titles = 4;
+    repeated string interests = 5;
+    repeated string skills = 6;
+    TargetingOptimization optimization_settings = 7;
+    AudienceExpansion expansion_rules = 8;
+}
+
+// AI-driven targeting optimization settings
+message TargetingOptimization {
+    bool enable_auto_expansion = 1;
+    double similarity_threshold = 2;
+    int32 max_audience_size = 3;
+    repeated string excluded_segments = 4;
+}
+
+// Audience expansion rules
+message AudienceExpansion {
+    bool enable_lookalike = 1;
+    double expansion_percentage = 2;
+    int32 max_additional_reach = 3;
+    repeated string seed_audiences = 4;
+}
+
+// Ad group configuration
+message AdGroup {
+    string id = 1;
+    string name = 2;
+    Targeting targeting = 3;
+    repeated Ad ads = 4;
+    Budget budget = 5;
+    AdGroupStatus status = 6;
+    google.protobuf.Timestamp created_at = 7;
+    google.protobuf.Timestamp updated_at = 8;
+}
+
+// Ad group status
+enum AdGroupStatus {
+    AD_GROUP_STATUS_UNSPECIFIED = 0;
+    ACTIVE = 1;
+    PAUSED = 2;
+    REMOVED = 3;
+}
+
+// Ad creative configuration
+message Ad {
+    string id = 1;
+    string headline = 2;
+    string description = 3;
+    repeated string image_urls = 4;
+    string landing_page_url = 5;
+    AdStatus status = 6;
+    repeated analytics.MetricType tracked_metrics = 7;
+    google.protobuf.Timestamp created_at = 8;
+    google.protobuf.Timestamp updated_at = 9;
+}
+
+// Ad status
+enum AdStatus {
+    AD_STATUS_UNSPECIFIED = 0;
+    ACTIVE = 1;
+    PAUSED = 2;
+    REJECTED = 3;
+    ARCHIVED = 4;
+}
+
+// Platform-specific configurations
+message PlatformConfig {
+    oneof config {
+        LinkedInConfig linkedin = 1;
+        GoogleAdsConfig google = 2;
+    }
+}
+
+// LinkedIn-specific configuration
+message LinkedInConfig {
+    string account_id = 1;
+    repeated string sponsored_content_ids = 2;
+    map<string, string> tracking_parameters = 3;
+    LinkedInBiddingStrategy bidding_strategy = 4;
+}
+
+// Google Ads-specific configuration
+message GoogleAdsConfig {
+    string customer_id = 1;
+    repeated string keyword_themes = 2;
+    map<string, string> tracking_parameters = 3;
+    GoogleBiddingStrategy bidding_strategy = 4;
+}
+
+// Campaign optimization rules
+message OptimizationRules {
+    double target_cpa = 1;
+    double target_roas = 2;
+    int32 optimization_interval_hours = 3;
+    repeated analytics.MetricType optimization_metrics = 4;
+    bool enable_auto_bidding = 5;
+}
+
+// Complete campaign configuration
+message Campaign {
+    string id = 1;
+    string user_id = 2;
+    string name = 3;
+    PlatformType platform = 4;
+    CampaignObjective objective = 5;
+    CampaignStatus status = 6;
+    Budget budget = 7;
+    Targeting targeting = 8;
+    repeated AdGroup ad_groups = 9;
+    repeated analytics.PerformanceTarget performance_targets = 10;
+    PlatformConfig platform_specific_config = 11;
+    OptimizationRules optimization_settings = 12;
+    google.protobuf.Timestamp created_at = 13;
+    google.protobuf.Timestamp updated_at = 14;
+    google.protobuf.Timestamp last_optimized_at = 15;
+}
+
+// Request/Response messages for service methods
+message CreateCampaignRequest {
+    Campaign campaign = 1;
+}
+
+message GetCampaignRequest {
+    string campaign_id = 1;
+}
+
+message ListCampaignsRequest {
+    int32 page_size = 1;
+    string page_token = 2;
+    string filter = 3;
+    string order_by = 4;
+}
+
+message ListCampaignsResponse {
+    repeated Campaign campaigns = 1;
+    string next_page_token = 2;
+    int32 total_size = 3;
+}
+
+message UpdateCampaignRequest {
+    Campaign campaign = 1;
+    google.protobuf.FieldMask update_mask = 2;
+}
+
+message DeleteCampaignRequest {
+    string campaign_id = 1;
+}
+
+message OptimizeCampaignRequest {
+    string campaign_id = 1;
+    repeated analytics.MetricType target_metrics = 2;
+    OptimizationRules optimization_rules = 3;
+}
+
+message GetCampaignPerformanceRequest {
+    string campaign_id = 1;
+    google.protobuf.Timestamp start_date = 2;
+    google.protobuf.Timestamp end_date = 3;
+}
+
+message CampaignPerformance {
+    string campaign_id = 1;
+    map<string, double> metrics = 2;
+    repeated analytics.Metric historical_metrics = 3;
+    repeated string recommendations = 4;
+}
+
+message BatchUpdateCampaignsRequest {
+    repeated Campaign campaigns = 1;
+    google.protobuf.FieldMask update_mask = 2;
+}
+
+message BatchUpdateCampaignsResponse {
+    repeated Campaign campaigns = 1;
+    repeated string failed_campaign_ids = 2;
+}
