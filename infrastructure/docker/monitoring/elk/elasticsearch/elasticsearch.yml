@@ -1,0 +1,40 @@
+# Cluster Configuration
+cluster.name: sales-intelligence-monitoring
+node.name: ${HOSTNAME}
+
+# Node Configuration
+node.master: true
+node.data: true
+
+# Paths Configuration
+path.data: /usr/share/elasticsearch/data
+path.logs: /usr/share/elasticsearch/logs
+
+# Memory Settings
+bootstrap.memory_lock: true
+
+# Network Configuration
+network.host: 0.0.0.0
+http.port: 9200
+
+# Discovery Configuration
+discovery.type: single-node
+
+# Security Settings
+xpack.security.enabled: false
+
+# Monitoring Configuration
+xpack.monitoring.enabled: true
+xpack.monitoring.collection.enabled: true
+
+# Performance Optimization
+indices.memory.index_buffer_size: "10%"
+thread_pool.write.queue_size: 1000
+thread_pool.search.queue_size: 1000
+
+# Index Settings
+action.auto_create_index: true
+
+# Cache Settings
+indices.fielddata.cache.size: "20%"
+indices.queries.cache.size: "20%"
