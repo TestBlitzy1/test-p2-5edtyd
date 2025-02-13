@@ -1,0 +1,74 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext",
+      "es2022"
+    ],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "noImplicitAny": true,
+    "alwaysStrict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@components/*": ["src/components/*"],
+      "@hooks/*": ["src/hooks/*"],
+      "@store/*": ["src/store/*"],
+      "@lib/*": ["src/lib/*"],
+      "@types/*": ["src/types/*"],
+      "@api/*": ["src/api/*"],
+      "@campaigns/*": ["src/features/campaigns/*"],
+      "@analytics/*": ["src/features/analytics/*"],
+      "@targeting/*": ["src/features/targeting/*"],
+      "@creative/*": ["src/features/creative/*"],
+      "@utils/*": ["src/utils/*"],
+      "@constants/*": ["src/constants/*"],
+      "@services/*": ["src/services/*"]
+    },
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "src/types/**/*.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".next",
+    "out",
+    "coverage",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ]
+}
