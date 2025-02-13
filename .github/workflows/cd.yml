@@ -1,0 +1,229 @@
+name: Continuous Deployment
+
+on:
+  workflow_run:
+    workflows: ["Continuous Integration", "Security Scan"]
+    types:
+      - completed
+  workflow_dispatch:
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: sales-intelligence-platform
+  KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+  ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+  DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
+  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+jobs:
+  prepare_deployment:
+    name: Prepare Deployment
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Download CI artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: build-artifacts
+          path: dist
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Setup ArgoCD CLI
+        uses: argoproj/setup-argo-cd@v1
+        with:
+          version: v2.8.0
+          
+      - name: Prepare deployment manifests
+        run: |
+          VERSION=$(echo $GITHUB_SHA | cut -c1-7)
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          
+          # Update image tags in Kubernetes manifests
+          sed -i "s|image:.*|image: ${ECR_REPOSITORY}:${VERSION}|g" k8s/staging/*
+          sed -i "s|image:.*|image: ${ECR_REPOSITORY}:${VERSION}|g" k8s/production/*
+
+  deploy_staging:
+    name: Deploy to Staging
+    needs: prepare_deployment
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Deploy to staging
+        run: |
+          argocd app create sales-platform-staging \
+            --repo ${{ github.server_url }}/${{ github.repository }} \
+            --path k8s/staging \
+            --dest-server https://staging-eks.${{ env.AWS_REGION }}.eks.amazonaws.com \
+            --dest-namespace staging \
+            --sync-policy automated \
+            --auto-prune \
+            --self-heal
+
+      - name: Wait for rollout
+        run: |
+          argocd app wait sales-platform-staging --timeout 300
+          kubectl -n staging rollout status deployment/sales-platform
+
+      - name: Run smoke tests
+        run: |
+          npm run test:e2e -- --config=src/test/jest.config.ts \
+            --testMatch="**/e2e/staging/**/*.spec.ts"
+
+      - name: Verify health checks
+        run: |
+          HEALTH_CHECK_URL="https://staging.example.com/health"
+          MAX_RETRIES=30
+          RETRY_INTERVAL=10
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            response=$(curl -s -o /dev/null -w "%{http_code}" $HEALTH_CHECK_URL)
+            if [ $response -eq 200 ]; then
+              echo "Health check passed"
+              exit 0
+            fi
+            sleep $RETRY_INTERVAL
+          done
+          echo "Health check failed after $MAX_RETRIES attempts"
+          exit 1
+
+      - name: Monitor metrics
+        run: |
+          curl -X POST "https://api.datadoghq.com/api/v1/events" \
+            -H "Content-Type: application/json" \
+            -H "DD-API-KEY: ${DATADOG_API_KEY}" \
+            -d @- << EOF
+            {
+              "title": "Staging Deployment - ${{ env.VERSION }}",
+              "text": "Monitoring deployment metrics",
+              "tags": ["env:staging", "version:${{ env.VERSION }}"]
+            }
+          EOF
+
+  deploy_production:
+    name: Deploy to Production
+    needs: deploy_staging
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Verify staging stability
+        run: |
+          # Check error rates
+          ERROR_RATE=$(curl -s "https://api.datadoghq.com/api/v1/metrics" \
+            -H "DD-API-KEY: ${DATADOG_API_KEY}" \
+            -d "error_rate{env:staging,version:${{ env.VERSION }}}")
+          
+          if [ $(echo "$ERROR_RATE > 1" | bc -l) ]; then
+            echo "Error rate too high in staging: $ERROR_RATE%"
+            exit 1
+          fi
+
+      - name: Initialize blue-green deployment
+        run: |
+          # Create new "blue" deployment
+          argocd app create sales-platform-blue \
+            --repo ${{ github.server_url }}/${{ github.repository }} \
+            --path k8s/production \
+            --dest-server https://prod-eks.${{ env.AWS_REGION }}.eks.amazonaws.com \
+            --dest-namespace production \
+            --sync-policy automated \
+            --self-heal
+
+      - name: Execute health checks
+        run: |
+          kubectl -n production rollout status deployment/sales-platform-blue
+          
+          # Comprehensive health validation
+          for endpoint in health metrics ready live; do
+            response=$(curl -s -o /dev/null -w "%{http_code}" \
+              "https://blue.prod.example.com/$endpoint")
+            if [ $response -ne 200 ]; then
+              echo "Health check failed for $endpoint"
+              exit 1
+            fi
+          done
+
+      - name: Gradual traffic shift
+        run: |
+          # Incrementally shift traffic using Istio
+          for weight in 20 40 60 80 100; do
+            kubectl apply -f - <<EOF
+            apiVersion: networking.istio.io/v1alpha3
+            kind: VirtualService
+            metadata:
+              name: sales-platform
+              namespace: production
+            spec:
+              hosts:
+              - "prod.example.com"
+              http:
+              - route:
+                - destination:
+                    host: sales-platform-blue
+                    port:
+                      number: 80
+                  weight: $weight
+                - destination:
+                    host: sales-platform-green
+                    port:
+                      number: 80
+                  weight: $((100-weight))
+            EOF
+            
+            # Monitor for errors during traffic shift
+            sleep 300
+            ERROR_RATE=$(curl -s "https://api.datadoghq.com/api/v1/metrics" \
+              -H "DD-API-KEY: ${DATADOG_API_KEY}" \
+              -d "error_rate{env:production,version:${{ env.VERSION }}}")
+            
+            if [ $(echo "$ERROR_RATE > 1" | bc -l) ]; then
+              echo "Error rate exceeded threshold during traffic shift"
+              exit 1
+            fi
+          done
+
+      - name: Finalize deployment
+        if: success()
+        run: |
+          # Promote blue to green
+          kubectl -n production delete deployment sales-platform-green
+          kubectl -n production rename deployment sales-platform-blue sales-platform-green
+          
+          # Update ArgoCD application
+          argocd app delete sales-platform-blue --cascade=false
+          
+          # Notify success
+          curl -X POST ${{ env.SLACK_WEBHOOK_URL }} \
+            -H 'Content-Type: application/json' \
+            -d '{"text":"✅ Production deployment successful - Version ${{ env.VERSION }}"}'
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          # Revert traffic
+          kubectl apply -f k8s/production/virtualservice-green.yaml
+          
+          # Delete failed deployment
+          kubectl -n production delete deployment sales-platform-blue
+          argocd app delete sales-platform-blue --cascade=false
+          
+          # Notify failure
+          curl -X POST ${{ env.SLACK_WEBHOOK_URL }} \
+            -H 'Content-Type: application/json' \
+            -d '{"text":"🚨 Production deployment failed - Rolling back to previous version"}'
