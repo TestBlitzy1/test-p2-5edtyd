@@ -1,0 +1,163 @@
+name: Security and Compliance Scanning
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    - cron: '0 0 * * *'  # Daily security scan
+
+env:
+  NODE_VERSION: '18'
+  SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+  SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  NODE_ENV: 'test'
+
+jobs:
+  security-scan:
+    name: Security and Compliance Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    strategy:
+      matrix:
+        scan-type: ['code', 'dependencies', 'compliance']
+      fail-fast: false
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Full git history for SonarQube
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm ci
+          npm install -g snyk@latest
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: javascript, typescript
+          queries: security-extended,security-and-quality
+
+      - name: Setup Snyk
+        uses: snyk/actions/setup@v3
+        env:
+          SNYK_TOKEN: ${{ env.SNYK_TOKEN }}
+
+      # Code Vulnerability Scanning
+      - name: Run Code Security Scan
+        if: matrix.scan-type == 'code'
+        run: |
+          npm run test:security:code
+          snyk code test --severity-threshold=high
+          
+      # Dependency Vulnerability Scanning
+      - name: Run Dependency Security Scan
+        if: matrix.scan-type == 'dependencies'
+        run: |
+          npm run test:security:dependencies
+          snyk test --all-projects
+          snyk monitor --all-projects
+
+      # GDPR Compliance Testing
+      - name: Run Compliance Tests
+        if: matrix.scan-type == 'compliance'
+        run: |
+          npm run test:security:compliance
+          npm run test:gdpr
+
+      # SonarQube Analysis
+      - name: SonarQube Analysis
+        if: matrix.scan-type == 'code'
+        run: |
+          sonar-scanner \
+            -Dsonar.projectKey=sales-intelligence-platform \
+            -Dsonar.sources=src \
+            -Dsonar.tests=src/test \
+            -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info \
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
+            -Dsonar.coverage.exclusions=src/test/**/* \
+            -Dsonar.cpd.exclusions=src/test/**/*
+
+      # Security Report Generation
+      - name: Generate Security Report
+        run: |
+          echo "Security Scan Summary" > security-report.md
+          echo "===================" >> security-report.md
+          echo "Scan Type: ${{ matrix.scan-type }}" >> security-report.md
+          echo "Timestamp: $(date)" >> security-report.md
+          
+          if [ -f snyk-result.json ]; then
+            echo "Snyk Results:" >> security-report.md
+            cat snyk-result.json >> security-report.md
+          fi
+          
+          if [ -f sonar-report.json ]; then
+            echo "SonarQube Results:" >> security-report.md
+            cat sonar-report.json >> security-report.md
+          fi
+
+      # Upload Security Reports
+      - name: Upload Security Reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-reports-${{ matrix.scan-type }}
+          path: |
+            security-report.md
+            snyk-result.json
+            sonar-report.json
+          retention-days: 30
+
+      # Fail on Critical Issues
+      - name: Check for Critical Issues
+        run: |
+          if grep -q "critical" security-report.md; then
+            echo "Critical security issues found!"
+            exit 1
+          fi
+
+  security-summary:
+    needs: security-scan
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Download All Reports
+        uses: actions/download-artifact@v3
+        with:
+          path: security-reports
+
+      - name: Generate Summary
+        run: |
+          echo "Security Scan Summary" > summary.md
+          echo "===================" >> summary.md
+          echo "Completed scans:" >> summary.md
+          ls -R security-reports/ >> summary.md
+          
+          for report in security-reports/*/security-report.md; do
+            echo "Results from $report:" >> summary.md
+            cat $report >> summary.md
+            echo "---" >> summary.md
+          done
+
+      - name: Upload Summary
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-scan-summary
+          path: summary.md
+          retention-days: 30
+
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "Security scan failed! Check the logs for details."
+          exit 1
