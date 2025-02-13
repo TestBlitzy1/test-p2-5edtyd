@@ -1,0 +1,62 @@
+# Sales Intelligence Platform Robots.txt
+# Version: 1.0
+# Last Updated: 2024
+
+# Default User Agent Rules
+User-agent: *
+
+# Allow public marketing and informational pages
+Allow: /
+Allow: /campaigns
+Allow: /analytics
+Allow: /about
+Allow: /contact
+Allow: /blog
+Allow: /assets
+Allow: /resources
+Allow: /features
+Allow: /pricing
+Allow: /terms
+Allow: /privacy
+Allow: /sitemap.xml
+
+# Protect API endpoints and sensitive routes
+Disallow: /api/
+Disallow: /(auth)/*
+Disallow: /(dashboard)/*
+Disallow: /settings/*
+Disallow: /*.json$
+Disallow: /*?*
+
+# Protect dynamic campaign and analytics pages
+Disallow: /campaigns/[id]/*
+Disallow: /campaigns/create/*
+Disallow: /campaigns/edit/*
+Disallow: /analytics/performance/*
+Disallow: /analytics/audience/*
+Disallow: /analytics/budget/*
+
+# Protect user-specific and admin routes
+Disallow: /user/*
+Disallow: /admin/*
+Disallow: /billing/*
+Disallow: /integrations/*
+
+# Protect static assets and build files
+Disallow: /_next/static/*
+Disallow: /*.js$
+Disallow: /*.css$
+Disallow: /*.png$
+Disallow: /*.jpg$
+
+# Protect API documentation
+Disallow: /api-docs/*
+
+# Crawl delay to manage server load
+Crawl-delay: 10
+
+# Sitemap reference
+Sitemap: https://[domain]/sitemap.xml
+
+# Host directive to prevent duplicate content
+Host: https://[domain]
