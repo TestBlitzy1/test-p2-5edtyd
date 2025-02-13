@@ -1,0 +1,187 @@
+name: Performance Testing
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Daily at midnight UTC
+  workflow_dispatch:  # Manual trigger
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/backend/**'
+      - 'src/test/performance/**'
+
+env:
+  API_BASE_URL: 'http://localhost:3000/api'
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  api-latency-tests:
+    name: API Latency Testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Start test environment
+        run: |
+          docker-compose -f docker-compose.test.yml up -d
+          sleep 30  # Wait for services to be ready
+
+      - name: Execute warm-up phase
+        run: |
+          yarn test:performance:warmup
+          sleep 120  # 2-minute warm-up period
+
+      - name: Run API latency tests
+        run: |
+          yarn test:performance:api \
+            --iterations=1000 \
+            --threshold=100 \
+            --report-dir=./test-results/api-latency
+
+      - name: Generate latency report
+        run: |
+          yarn test:performance:report \
+            --input=./test-results/api-latency \
+            --output=./test-results/api-latency-report.html
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: api-latency-results
+          path: |
+            ./test-results/api-latency
+            ./test-results/api-latency-report.html
+
+  ai-processing-tests:
+    name: AI Processing Performance
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install AI service dependencies
+        run: |
+          pip install -r src/backend/ai-service/requirements.txt
+          pip install pytest pytest-asyncio pytest-benchmark
+
+      - name: Start AI service containers
+        run: |
+          docker-compose -f docker-compose.ai.yml up -d
+          sleep 30  # Wait for services to be ready
+
+      - name: Run AI processing tests
+        run: |
+          pytest src/test/performance/metrics/ai.processing.spec.ts \
+            --benchmark-only \
+            --benchmark-autosave \
+            --benchmark-compare
+
+      - name: Generate AI performance report
+        run: |
+          python scripts/generate_ai_performance_report.py \
+            --input ./.benchmarks \
+            --output ./test-results/ai-performance-report.html
+
+      - name: Upload AI test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: ai-processing-results
+          path: |
+            ./.benchmarks
+            ./test-results/ai-performance-report.html
+
+  load-tests:
+    name: Distributed Load Testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup k6
+        uses: grafana/k6-action@v0.3.0
+
+      - name: Start test environment
+        run: |
+          docker-compose -f docker-compose.test.yml up -d
+          sleep 30  # Wait for services to be ready
+
+      - name: Execute load tests
+        run: |
+          k6 run \
+            --out json=./test-results/load-test-metrics.json \
+            --summary-export=./test-results/load-test-summary.json \
+            src/test/load/k6/campaign.creation.js
+
+      - name: Generate load test report
+        run: |
+          yarn test:performance:load-report \
+            --metrics ./test-results/load-test-metrics.json \
+            --summary ./test-results/load-test-summary.json \
+            --output ./test-results/load-test-report.html
+
+      - name: Upload load test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: load-test-results
+          path: |
+            ./test-results/load-test-metrics.json
+            ./test-results/load-test-summary.json
+            ./test-results/load-test-report.html
+
+  performance-report:
+    name: Aggregate Performance Report
+    needs: [api-latency-tests, ai-processing-tests, load-tests]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: ./artifacts
+
+      - name: Generate comprehensive report
+        run: |
+          yarn test:performance:aggregate-report \
+            --api-latency ./artifacts/api-latency-results \
+            --ai-processing ./artifacts/ai-processing-results \
+            --load-test ./artifacts/load-test-results \
+            --output ./performance-report.html
+
+      - name: Upload comprehensive report
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-report
+          path: ./performance-report.html
+
+      - name: Check performance thresholds
+        run: |
+          yarn test:performance:check-thresholds \
+            --api-latency-threshold 100 \
+            --ai-processing-threshold 5000 \
+            --load-test-error-rate 0.001 \
+            --report ./performance-report.html
