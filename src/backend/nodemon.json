@@ -1,0 +1,25 @@
+{
+  "watch": [
+    "api-gateway/src/**/*.ts",
+    "auth-service/src/**/*.ts", 
+    "campaign-service/src/**/*.ts",
+    "analytics-service/src/**/*.ts",
+    "platform-integration/src/**/*.ts",
+    "shared/**/*.ts"
+  ],
+  "ext": "ts,json",
+  "ignore": [
+    "**/*.spec.ts",
+    "**/*.test.ts",
+    "node_modules",
+    "dist"
+  ],
+  "exec": "ts-node -r tsconfig-paths/register",
+  "verbose": true,
+  "delay": 2000,
+  "env": {
+    "NODE_ENV": "development",
+    "TS_NODE_PROJECT": "./tsconfig.json"
+  },
+  "restartable": "rs"
+}
