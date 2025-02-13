@@ -1,0 +1,140 @@
+# Campaign Service Kubernetes Configuration
+# Version: 1.0.0
+# Dependencies: kubernetes v1.27+
+# Purpose: Deployment, Service and HPA configuration for the campaign service microservice
+
+---
+# Deployment configuration for the campaign service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: campaign-service
+  namespace: default
+  labels:
+    app: campaign-service
+    component: backend
+    tier: microservice
+spec:
+  replicas: 3  # Initial replica count for high availability
+  selector:
+    matchLabels:
+      app: campaign-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0  # Zero downtime deployments
+  template:
+    metadata:
+      labels:
+        app: campaign-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3001"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: campaign-service
+        image: campaign-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3001
+          protocol: TCP
+          name: http
+        resources:
+          requests:
+            cpu: "500m"     # Guaranteed CPU allocation
+            memory: "512Mi" # Guaranteed memory allocation
+          limits:
+            cpu: "1000m"    # Maximum CPU usage
+            memory: "1Gi"   # Maximum memory usage
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+        envFrom:
+        - configMapRef:
+            name: sales-intelligence-platform-config
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+      terminationGracePeriodSeconds: 60
+
+---
+# Service configuration for the campaign service
+apiVersion: v1
+kind: Service
+metadata:
+  name: campaign-service
+  namespace: default
+  labels:
+    app: campaign-service
+  annotations:
+    prometheus.io/scrape: "true"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3001
+    targetPort: 3001
+    protocol: TCP
+    name: http
+  selector:
+    app: campaign-service
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800  # 3 hour session stickiness
+
+---
+# Horizontal Pod Autoscaler configuration
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: campaign-service-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: campaign-service
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 120
