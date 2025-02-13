@@ -1,0 +1,169 @@
+config:
+  # Base configuration for API endpoints
+  target: "http://localhost:3000/api"
+  # Environment variables
+  environments:
+    production:
+      target: "https://api.salesintelligence.com"
+    staging:
+      target: "https://staging-api.salesintelligence.com"
+  
+  # Load test phases
+  phases:
+    - name: "Warm up phase"
+      duration: 60
+      arrivalRate: 5
+      rampTo: 50
+    - name: "Sustained load phase" 
+      duration: 300
+      arrivalRate: 50
+    - name: "Stress test phase"
+      duration: 60
+      arrivalRate: 50
+      rampTo: 100
+
+  # Default headers and auth
+  defaults:
+    headers:
+      Content-Type: "application/json"
+      Authorization: "{{ $processEnvironment.API_TOKEN }}"
+      User-Agent: "Artillery/LoadTest"
+
+  # Response validation and thresholds
+  ensure:
+    maxErrorRate: 1
+    p95: 100
+    median: 50
+
+  # Plugins for enhanced functionality
+  plugins:
+    metrics-by-endpoint: {}
+    expect: {}
+    statsd:
+      host: "localhost"
+      prefix: "artillery.platform"
+
+  # Variable processors
+  processor: "./processors.js"
+
+# Test scenarios
+scenarios:
+  - name: "LinkedIn Campaign Operations"
+    weight: 50
+    flow:
+      # Create campaign
+      - post:
+          url: "/platform/linkedin/campaigns"
+          beforeRequest: "generateLinkedInCampaign"
+          json:
+            name: "{{ $processEnvironment.CAMPAIGN_NAME }}"
+            objective: "LEAD_GENERATION"
+            status: "ACTIVE"
+            budget:
+              amount: 1000
+              currency: "USD"
+              period: "DAILY"
+            targeting:
+              locations:
+                - id: "us:0"
+                  country: "United States"
+              industries: ["SOFTWARE"]
+              companySize: ["11-50", "51-200"]
+          capture:
+            - json: "$.id"
+              as: "campaignId"
+          expect:
+            - statusCode: 201
+            - contentType: "application/json"
+          thresholds:
+            p95: 100
+            median: 50
+            errorRate: 1
+
+      # Get campaign details
+      - get:
+          url: "/platform/linkedin/campaigns/{{ campaignId }}"
+          expect:
+            - statusCode: 200
+          thresholds:
+            p95: 100
+            median: 50
+
+      # Update campaign
+      - patch:
+          url: "/platform/linkedin/campaigns/{{ campaignId }}"
+          json:
+            status: "PAUSED"
+          expect:
+            - statusCode: 200
+          thresholds:
+            p95: 100
+
+  - name: "Google Ads Campaign Operations"
+    weight: 50
+    flow:
+      # Create campaign
+      - post:
+          url: "/platform/google/campaigns"
+          beforeRequest: "generateGoogleCampaign"
+          json:
+            name: "{{ $processEnvironment.CAMPAIGN_NAME }}"
+            objective: "CONVERSIONS"
+            status: "ACTIVE"
+            budget:
+              amount: 1000
+              currency: "USD"
+              period: "DAILY"
+            platformConfig:
+              google:
+                networkSettings:
+                  searchNetwork: true
+                  displayNetwork: false
+          capture:
+            - json: "$.id"
+              as: "campaignId"
+          expect:
+            - statusCode: 201
+          thresholds:
+            p95: 100
+            median: 50
+
+      # Get campaign performance
+      - get:
+          url: "/platform/google/campaigns/{{ campaignId }}/performance"
+          expect:
+            - statusCode: 200
+            - hasProperty: "metrics"
+          thresholds:
+            p95: 100
+            median: 50
+
+      # Pause campaign
+      - post:
+          url: "/platform/google/campaigns/{{ campaignId }}/pause"
+          expect:
+            - statusCode: 200
+          thresholds:
+            p95: 100
+
+# Custom functions
+functions:
+  generateLinkedInCampaign:
+    - function: "generateCampaignData"
+      platform: "LINKEDIN"
+  generateGoogleCampaign:
+    - function: "generateCampaignData"
+      platform: "GOOGLE"
+
+# Reporting configuration
+reporting:
+  format: "json"
+  output: "./reports/platform-load-test.json"
+  metrics:
+    - name: "response_time"
+      type: "histogram"
+      buckets: [10, 25, 50, 100, 250]
+    - name: "error_rate"
+      type: "counter"
+    - name: "throughput"
+      type: "meter"
