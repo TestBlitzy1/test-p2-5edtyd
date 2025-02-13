@@ -1,0 +1,34 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "baseUrl": "./src",
+    "paths": {
+      "@models/*": ["models/*"],
+      "@services/*": ["services/*"], 
+      "@controllers/*": ["controllers/*"],
+      "@utils/*": ["utils/*"],
+      "@config/*": ["config/*"],
+      "@shared/*": ["../../shared/*"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.json"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.spec.ts",
+    "**/*.test.ts",
+    "coverage"
+  ],
+  "references": [
+    {
+      "path": "../shared"
+    }
+  ]
+}
