@@ -1,0 +1,148 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+poetry.lock
+.pnp
+.pnp.js
+
+# Build and compilation artifacts
+dist/
+build/
+.next/
+coverage/
+*.tsbuildinfo
+out/
+storybook-static/
+
+# Environment and secrets
+.env
+.env.*
+*.env.local
+*.env.development.local
+*.env.test.local
+*.env.production.local
+.env.development
+.env.test
+.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.mypy_cache/
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+.project
+.classpath
+.settings/
+*.iml
+.history/
+
+# Infrastructure and deployment
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+.terraformrc
+terraform.rc
+kubeconfig
+*.pem
+*.key
+*.crt
+*.csr
+
+# System files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# Docker
+.docker/
+docker-compose.override.yml
+
+# Testing
+/coverage
+.nyc_output/
+
+# Misc
+.cache/
+.temp/
+.tmp/
+*.pid
+*.seed
+*.pid.lock
+
+# CDK
+cdk.out/
+.cdk.staging/
+cdk.context.json
+
+# Local development
+local/
+dev/
+*.local
+
+# Generated files
+generated/
+*.generated.*
+swagger-ui/
+api-docs/
+
+# Sensitive data
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+*.keystore
+*.jks
+credentials/
+secrets/
+
+# Database
+*.sqlite
+*.db
+*.sql
+
+# Kubernetes
+*.kubeconfig
+kube/
+k8s-*
+
+# Monitoring and metrics
+grafana/
+prometheus/
+*.metrics
