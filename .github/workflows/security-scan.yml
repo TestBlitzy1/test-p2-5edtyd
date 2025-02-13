@@ -1,0 +1,186 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+  pull_request:
+    branches: [ main, develop ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly scan on Sundays
+
+env:
+  NODE_VERSION: '18.x'
+  SECURITY_SCAN_TIMEOUT: '30m'
+
+jobs:
+  codeql-analysis:
+    name: CodeQL Security Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'javascript', 'typescript', 'python' ]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended,security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v2
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  snyk-scan:
+    name: Snyk Security Scan
+    needs: codeql-analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ['src/backend', 'src/web']
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup Snyk
+        uses: snyk/actions/setup@v3
+
+      - name: Install dependencies
+        run: |
+          cd ${{ matrix.project }}
+          npm ci
+
+      - name: Run Snyk scan
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          cd ${{ matrix.project }}
+          snyk test --all-projects --severity-threshold=high
+          snyk monitor --all-projects
+        continue-on-error: true
+
+      - name: Upload Snyk results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: snyk.sarif
+          category: "Snyk/${{ matrix.project }}"
+
+  sonarqube-analysis:
+    name: SonarQube Analysis
+    needs: snyk-scan
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@v1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: >
+            -Dsonar.projectKey=sales-intelligence-platform
+            -Dsonar.sources=src
+            -Dsonar.tests=src/test
+            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts
+            -Dsonar.typescript.lcov.reportPaths=coverage/lcov.info
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+            -Dsonar.coverage.exclusions=src/test/**/*
+            -Dsonar.cpd.exclusions=src/test/**/*
+
+      - name: Check Quality Gate
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          QUALITY_GATE_STATUS=$(curl -s -u "${SONAR_TOKEN}:" "https://${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=sales-intelligence-platform" | jq -r '.projectStatus.status')
+          if [ "$QUALITY_GATE_STATUS" != "OK" ]; then
+            echo "Quality Gate failed with status: $QUALITY_GATE_STATUS"
+            exit 1
+          fi
+
+  security-report:
+    name: Generate Security Report
+    needs: [codeql-analysis, snyk-scan, sonarqube-analysis]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Download scan results
+        uses: actions/download-artifact@v3
+        with:
+          path: security-results
+
+      - name: Generate consolidated report
+        run: |
+          echo "# Security Scan Report" > security-report.md
+          echo "## CodeQL Analysis" >> security-report.md
+          cat security-results/codeql-results/*.sarif >> security-report.md
+          echo "## Snyk Vulnerabilities" >> security-report.md
+          cat security-results/snyk-results/*.sarif >> security-report.md
+          echo "## SonarQube Analysis" >> security-report.md
+          cat security-results/sonar-results/sonar-report.json >> security-report.md
+
+      - name: Upload security report
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-report
+          path: security-report.md
+          retention-days: 30
