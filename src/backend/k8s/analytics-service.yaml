@@ -1,0 +1,126 @@
+# Analytics Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-service
+  labels:
+    app: analytics-service
+    tier: backend
+    version: v1
+    component: analytics
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: analytics-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: analytics-service
+        tier: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3003"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
+      containers:
+      - name: analytics-service
+        image: sales-intelligence/analytics-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3003
+          name: http
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        env:
+        - name: ANALYTICS_SERVICE_PORT
+          value: "3003"
+        - name: ANALYTICS_SERVICE_HOST
+          value: "0.0.0.0"
+        - name: NODE_ENV
+          value: "production"
+        - name: METRICS_ENABLED
+          value: "true"
+        - name: PREDICTION_BATCH_SIZE
+          value: "100"
+        envFrom:
+        - configMapRef:
+            name: sales-intelligence-platform-config
+        - secretRef:
+            name: sales-intelligence-platform-secrets
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3003
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 3003
+            scheme: HTTP
+          initialDelaySeconds: 20
+          periodSeconds: 5
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config
+          readOnly: true
+        - name: secrets-volume
+          mountPath: /app/secrets
+          readOnly: true
+      volumes:
+      - name: config-volume
+        configMap:
+          name: sales-intelligence-platform-config
+      - name: secrets-volume
+        secret:
+          secretName: sales-intelligence-platform-secrets
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - analytics-service
+              topologyKey: kubernetes.io/hostname
+---
+# Analytics Service Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: analytics-service
+  labels:
+    app: analytics-service
+    tier: backend
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "3003"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3003
+    targetPort: 3003
+    protocol: TCP
+    name: http
+  selector:
+    app: analytics-service
