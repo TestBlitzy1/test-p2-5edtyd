@@ -1,0 +1,190 @@
+# Service Mesh Configuration for Sales Intelligence Platform
+# Version: 1.18
+# Purpose: Manages service-to-service communication, traffic routing, security, and observability
+
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: service-mesh-config
+  namespace: istio-system
+  labels:
+    app: sales-intelligence-platform
+    component: service-mesh
+spec:
+  profile: default
+  components:
+    # Core Istio pilot configuration
+    pilot:
+      k8s:
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2Gi
+          limits:
+            cpu: 1000m
+            memory: 4Gi
+        hpaSpec:
+          minReplicas: 2
+          maxReplicas: 5
+          metrics:
+            - type: Resource
+              resource:
+                name: cpu
+                target:
+                  type: Utilization
+                  averageUtilization: 75
+
+    # Ingress gateway configuration
+    ingressGateways:
+      - name: istio-ingressgateway
+        enabled: true
+        k8s:
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          hpaSpec:
+            minReplicas: 2
+            maxReplicas: 5
+
+  # Global mesh configuration values
+  values:
+    global:
+      # Proxy configuration for all services
+      proxy:
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        privileged: false
+        enableCoreDump: false
+        
+      # mTLS configuration
+      mtls:
+        enabled: true
+        mode: STRICT
+        
+      # Default network configuration
+      network: sales-intelligence-network
+      
+    # Telemetry configuration
+    telemetry:
+      enabled: true
+      v2:
+        enabled: true
+        prometheus:
+          enabled: true
+        stackdriver:
+          enabled: false
+        
+    # Traffic management configuration
+    pilot:
+      enableProtocolSniffing: true
+      autoscaleEnabled: true
+      autoscaleMin: 2
+      autoscaleMax: 5
+      replicaCount: 2
+      traceSampling: 1.0
+      
+    # Security configuration
+    security:
+      enableNamespacesByDefault: true
+      selfSigned: false
+      createMeshPolicy: true
+      
+    # Gateway configuration
+    gateways:
+      istio-ingressgateway:
+        autoscaleEnabled: true
+        type: LoadBalancer
+        sds:
+          enabled: true
+        serviceAnnotations:
+          service.beta.kubernetes.io/aws-load-balancer-type: nlb
+          
+    # Sidecar injector configuration
+    sidecarInjectorWebhook:
+      enableNamespacesByDefault: true
+      rewriteAppHTTPProbe: true
+      
+---
+# Default destination rule enforcing mTLS
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: default-destination-rule
+  namespace: default
+spec:
+  host: "*.default.svc.cluster.local"
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 5s
+      http:
+        http2MaxRequests: 1000
+        maxRequestsPerConnection: 100
+        maxRetries: 3
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 100
+
+---
+# Default authorization policy
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: default-auth-policy
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: sales-intelligence-platform
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/default/sa/default"]
+      to:
+        - operation:
+            methods: ["GET", "POST", "PUT", "DELETE", "PATCH"]
+    - from:
+        - source:
+            namespaces: ["default"]
+  action: ALLOW
+
+---
+# Service mesh monitoring configuration
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: mesh-telemetry
+  namespace: default
+spec:
+  tracing:
+    - providers:
+        - name: jaeger
+      randomSamplingPercentage: 100.0
+  metrics:
+    - providers:
+        - name: prometheus
+      overrides:
+        - match:
+            metric: REQUEST_COUNT
+          tagOverrides:
+            response_code:
+              value: response.code
+  accessLogging:
+    - providers:
+        - name: envoy
+      filter:
+        expression: "response.code >= 400"
