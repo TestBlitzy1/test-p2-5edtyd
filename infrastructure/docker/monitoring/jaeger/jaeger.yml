@@ -1,0 +1,76 @@
+version: '1'
+
+agent:
+  collector:
+    host-port: jaeger-collector:14250
+    grpc-server-tls:
+      enabled: true
+      cert: /etc/jaeger/cert/collector.crt
+      key: /etc/jaeger/cert/collector.key
+  sampling:
+    strategies-file: /etc/jaeger/sampling_strategies.json
+    fetch-interval: 1m
+  tags:
+    - key: environment
+      value: production
+    - key: deployment
+      value: sales-intelligence-platform
+
+collector:
+  zipkin:
+    host-port: :9411
+  queue:
+    queue-size: 100000
+    workers: 50
+    item-max-size: 1MiB
+  grpc:
+    host-port: :14250
+    max-message-size: 4194304
+  http:
+    host-port: :14268
+
+sampling:
+  default_strategy:
+    type: probabilistic
+    param: 1.0
+    operation_strategies:
+      - operation: HTTP GET /api/v1/campaigns
+        type: probabilistic
+        param: 0.8
+      - operation: HTTP POST /api/v1/campaigns
+        type: probabilistic
+        param: 1.0
+  service_strategies:
+    - service: campaign-service
+      type: probabilistic
+      param: 1.0
+    - service: analytics-service
+      type: probabilistic
+      param: 0.8
+    - service: platform-integration
+      type: probabilistic
+      param: 1.0
+
+storage:
+  type: memory
+  options:
+    max-traces: 100000
+    retention-time: 24h
+  cache:
+    max-size: 1GiB
+    ttl: 1h
+
+query:
+  base-path: /jaeger
+  port: 16686
+  static-files: /go/jaeger-ui/
+  ui-config: /etc/jaeger/ui-config.json
+  cors:
+    allowed-origins:
+      - "*"
+    allowed-headers:
+      - Content-Type
+  max-clock-skew-adjustment: 10s
+
+health_check:
+  http-port: 14269
