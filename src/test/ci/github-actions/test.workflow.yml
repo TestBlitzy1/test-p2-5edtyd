@@ -1,0 +1,156 @@
+name: Comprehensive Test Suite
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  NODE_ENV: test
+  CI: true
+  TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+  API_KEY: ${{ secrets.API_KEY }}
+
+jobs:
+  test:
+    name: Run Test Matrix
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    strategy:
+      matrix:
+        node-version: [18.x]
+        test-type: [unit, integration, e2e, security, performance, load]
+      fail-fast: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.npm
+            node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup test environment
+        run: |
+          npm run test:setup
+          node ./src/test/utils/test.setup.ts
+
+      - name: Run unit tests
+        if: matrix.test-type == 'unit'
+        run: npm run test:unit
+        env:
+          JEST_JUNIT_OUTPUT_DIR: coverage/unit
+          COVERAGE_THRESHOLD: 80
+
+      - name: Run integration tests
+        if: matrix.test-type == 'integration'
+        run: npm run test:integration
+        env:
+          JEST_JUNIT_OUTPUT_DIR: coverage/integration
+
+      - name: Run E2E tests
+        if: matrix.test-type == 'e2e'
+        run: npm run test:e2e
+        env:
+          JEST_JUNIT_OUTPUT_DIR: coverage/e2e
+
+      - name: Run security tests
+        if: matrix.test-type == 'security'
+        run: |
+          npm run test:security
+          npm audit
+          npx snyk test
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Run performance tests
+        if: matrix.test-type == 'performance'
+        run: npm run test:performance
+        env:
+          PERFORMANCE_THRESHOLD_CPU: 70
+          PERFORMANCE_THRESHOLD_MEMORY: 80
+          PERFORMANCE_THRESHOLD_RESPONSE_TIME: 200
+
+      - name: Run load tests
+        if: matrix.test-type == 'load'
+        run: npm run test:load
+        env:
+          LOAD_TEST_USERS: 1000
+          LOAD_TEST_DURATION: 30
+          LOAD_TEST_RPS: 100
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results-${{ matrix.test-type }}
+          path: |
+            coverage/${{ matrix.test-type }}
+            junit.xml
+            performance/**/*
+          retention-days: 14
+
+      - name: Upload coverage reports
+        if: matrix.test-type == 'unit'
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          flags: unit-tests
+          fail_ci_if_error: true
+
+      - name: Store test metrics
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-metrics-${{ matrix.test-type }}
+          path: |
+            logs/test-execution.log
+            performance/**/*
+          retention-days: 30
+
+      - name: Cleanup test environment
+        if: always()
+        run: |
+          npm run test:cleanup
+          node ./src/test/utils/test.setup.ts cleanup
