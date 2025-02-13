@@ -1,0 +1,52 @@
+# Server Configuration
+server.name: sales-intelligence-kibana
+server.host: "0.0.0.0"
+server.port: 5601
+server.maxPayloadBytes: 1048576
+server.compression.enabled: true
+server.compression.referrerWhitelist: ["*"]
+
+# Elasticsearch Connection
+elasticsearch.hosts: ["http://elasticsearch:9200"]
+elasticsearch.requestTimeout: 30000
+elasticsearch.shardTimeout: 30000
+kibana.index: ".kibana"
+
+# Monitoring Configuration
+xpack.monitoring.enabled: true
+xpack.monitoring.ui.container.elasticsearch.enabled: true
+monitoring.ui.container.elasticsearch.enabled: true
+monitoring.ui.container.logstash.enabled: true
+monitoring.ui.elasticsearch.hosts: ["http://elasticsearch:9200"]
+monitoring.ui.elasticsearch.requestTimeout: 30000
+monitoring.ui.elasticsearch.pingTimeout: 30000
+monitoring.ui.min_interval_seconds: 10
+
+# Container Monitoring
+monitoring.ui.container.elasticsearch.enabled: true
+cpu.cgroup.path.override: "/"
+
+# Security Configuration
+xpack.security.enabled: false
+
+# Reporting Configuration
+xpack.reporting.enabled: true
+xpack.reporting.capture.maxAttempts: 3
+xpack.reporting.queue.timeout: 120000
+xpack.reporting.csv.maxSizeBytes: 10485760
+
+# Logging Configuration
+logging.dest: stdout
+logging.json: true
+logging.timezone: "UTC"
+logging.rotate:
+  enabled: true
+  size: "100m"
+  interval: "24h"
+
+# Telemetry Settings
+telemetry.enabled: false
+
+# Performance Optimization
+server.compression.enabled: true
+server.compression.referrerWhitelist: ["*"]
