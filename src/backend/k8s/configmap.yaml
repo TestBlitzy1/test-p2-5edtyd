@@ -1,0 +1,152 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sales-intelligence-platform-config
+  namespace: default
+  labels:
+    app: sales-intelligence-platform
+    environment: production
+    version: 1.0.0
+    managed-by: kubernetes
+    component: configuration
+data:
+  # API Gateway Configuration
+  api-gateway.yaml: |
+    port: 3000
+    nodeEnv: production
+    cors:
+      origin: https://*.salesintelligence.com
+      methods: GET,POST,PUT,DELETE,PATCH
+      allowedHeaders: Content-Type,Authorization,X-Request-ID
+      maxAge: 86400
+    rateLimit:
+      windowMs: 60000  # 1 minute
+      maxRequests: 1000
+      skipFailedRequests: true
+    circuitBreaker:
+      timeout: 5000  # 5 seconds
+      resetTimeoutMs: 30000  # 30 seconds
+      errorThresholdPercentage: 50
+    http:
+      maxRequestSize: 10mb
+      requestTimeout: 30000  # 30 seconds
+      compression: true
+      ssl: true
+      keepAliveTimeout: 5000
+
+  # Campaign Service Configuration  
+  campaign-service.yaml: |
+    port: 3001
+    nodeEnv: production
+    database:
+      host: ${DB_HOST}
+      port: 5432
+      name: campaign_db
+      schema: public
+      pool:
+        min: 5
+        max: 20
+        idleTimeoutMs: 10000
+        acquireTimeoutMs: 60000
+    redis:
+      host: ${REDIS_HOST}
+      port: 6379
+      db: 0
+      keyPrefix: campaign
+    cache:
+      ttl: 3600  # 1 hour
+      maxSize: 1000
+      updateAgeOnGet: true
+    retry:
+      attempts: 3
+      delay: 1000  # 1 second
+      backoff: exponential
+    batch:
+      size: 50
+      flushIntervalMs: 5000
+
+  # Analytics Service Configuration
+  analytics-service.yaml: |
+    port: 3002
+    nodeEnv: production
+    database:
+      host: ${DB_HOST}
+      port: 5432
+      name: analytics_db
+      schema: public
+      ssl: true
+    redis:
+      host: ${REDIS_HOST}
+      port: 6379
+      db: 1
+      keyPrefix: analytics
+    processing:
+      batchSize: 1000
+      intervalSeconds: 60
+      aggregationWindowSeconds: 300
+      maxConcurrentJobs: 5
+    retention:
+      dataRetentionDays: 90
+      archiveEnabled: true
+    realtime:
+      updateIntervalSeconds: 10
+      performanceAlertThreshold: 0.2
+      bufferSize: 10000
+
+  # AI Service Configuration
+  ai-service.yaml: |
+    port: 3003
+    modelServing:
+      port: 8501
+      batchSize: 32
+      maxQueueSize: 100
+      inferenceTimeoutMs: 5000
+      modelReloadIntervalSeconds: 3600
+      gpuMemoryFraction: 0.8
+      maxConcurrentInferences: 10
+    optimization:
+      warmupDurationSeconds: 30
+      modelCacheSizeMB: 5120
+      fallbackStrategy: last_successful
+      quantization: true
+    monitoring:
+      metricsSamplingRate: 0.1
+      profiling: true
+
+  # Observability Configuration
+  observability.yaml: |
+    metrics:
+      enabled: true
+      port: 9090
+      path: /metrics
+      labels:
+        app: sales-intelligence-platform
+        environment: production
+    healthCheck:
+      path: /health
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+    tracing:
+      enabled: true
+      samplingRate: 0.1
+      exportEndpoint: ${JAEGER_ENDPOINT}
+    logging:
+      level: info
+      format: json
+      includeTrace: true
+    alerting:
+      webhookUrl: ${ALERT_WEBHOOK}
+      thresholds:
+        cpu: 80
+        memory: 75
+        errorRate: 1
+    retention:
+      traceRetentionDays: 7
+      metricsRetentionDays: 30
+    errorReporting:
+      enabled: true
+      sampleRate: 1.0
+      ignorePatterns:
+        - EconnRefused
+        - RequestTimeout
