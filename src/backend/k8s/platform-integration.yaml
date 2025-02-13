@@ -1,0 +1,171 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: platform-integration-deployment
+  labels:
+    app: platform-integration
+    component: integration
+    environment: production
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: platform-integration
+  template:
+    metadata:
+      labels:
+        app: platform-integration
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
+      containers:
+      - name: platform-integration
+        image: sales-intelligence/platform-integration:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3002
+          name: http
+        - containerPort: 9090
+          name: metrics
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3002"
+        - name: LINKEDIN_API_CONFIG
+          valueFrom:
+            secretKeyRef:
+              name: sales-intelligence-platform-secrets
+              key: LINKEDIN_CLIENT_SECRET
+        - name: GOOGLE_ADS_CONFIG
+          valueFrom:
+            secretKeyRef:
+              name: sales-intelligence-platform-secrets
+              key: GOOGLE_ADS_CLIENT_SECRET
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config
+          readOnly: true
+        - name: tls-certs
+          mountPath: /app/certs
+          readOnly: true
+      volumes:
+      - name: config-volume
+        configMap:
+          name: sales-intelligence-platform-config
+      - name: tls-certs
+        secret:
+          secretName: sales-intelligence-platform-secrets
+          items:
+          - key: TLS_CERT
+            path: tls.crt
+          - key: TLS_KEY
+            path: tls.key
+      terminationGracePeriodSeconds: 60
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - platform-integration
+              topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: platform-integration-service
+  labels:
+    app: platform-integration
+    component: integration
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: http
+    protocol: TCP
+    name: http
+  - port: 9090
+    targetPort: metrics
+    protocol: TCP
+    name: metrics
+  selector:
+    app: platform-integration
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: platform-integration-hpa
+  labels:
+    app: platform-integration
+    component: integration
+spec:
+  minReplicas: 3
+  maxReplicas: 10
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: platform-integration-deployment
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 120
